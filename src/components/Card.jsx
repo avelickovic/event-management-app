@@ -1,0 +1,1 @@
+function Card({title,description,date,})
