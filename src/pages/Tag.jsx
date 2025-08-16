@@ -3,42 +3,30 @@ import {
     FormControl, InputLabel, Select, MenuItem, Stack, Paper
 } from "@mui/material";
 import Card from "../components/Card.jsx";
-import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import {useNavigate, useParams} from "react-router-dom";
+import {useEffect, useState} from "react";
 import _axios from "../axios.js";
 import TopReactions from "../components/TopReactions.jsx";
 
-function Categories() {
+function Tag() {
+    const { tagName } = useParams();
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [categories, setCategories] = useState([]);
-    const [selectedCategory, setSelectedCategory] = useState("");
+    const [categories, setCategories] = useState({});
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(6);
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
     const navigate = useNavigate();
 
-    const fetchCategories = async () => {
-        try {
-            const res = await _axios.get("/api/categories/");
-            setCategories(res.data.data || []);
-            if (res.data.data.length > 0) {
-                setSelectedCategory(res.data.data[0].id); // Default to first category
-            }
-        } catch (err) {
-            console.error(err);
-            setError("Failed to load categories");
-        }
-    };
-
-    const fetchEvents = async (categoryId, currentPage, currentLimit) => {
-        if (!categoryId) return;
+    const fetchData = async (currentPage, currentLimit) => {
         try {
             setLoading(true);
+            const tagRes = await _axios.get(`/api/tags/name/${tagName}`);
+            const tagId = tagRes.data.id;
 
-            const eventsRes = await _axios.get(`/api/events/eventsByCategory/${categoryId}`, {
+            const eventsRes = await _axios.get(`/api/events/eventsByTag/${tagId}`, {
                 params: { page: currentPage, limit: currentLimit }
             });
 
@@ -46,26 +34,29 @@ function Categories() {
             setTotal(eventsRes.data.total || 0);
             setTotalPages(Math.max(1, eventsRes.data.totalPages || 1));
 
+            // Reset to page 1 if current page is beyond total pages
             if (currentPage > eventsRes.data.totalPages && eventsRes.data.totalPages > 0) {
                 setPage(1);
             }
+
+            const categoriesRes = await _axios.get("/api/categories/");
+            const categoryMap = {};
+            categoriesRes.data.data.forEach(cat => {
+                categoryMap[cat.id] = cat.name;
+            });
+            setCategories(categoryMap);
+
         } catch (err) {
             console.error(err);
-            setError(err.response?.data?.message || "Failed to load events");
+            setError(err.response?.data?.message || "Failed to load events for this tag");
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchCategories();
-    }, []);
-
-    useEffect(() => {
-        if (selectedCategory) {
-            fetchEvents(selectedCategory, page, limit);
-        }
-    }, [selectedCategory, page, limit]);
+        fetchData(page, limit);
+    }, [tagName, page, limit]);
 
     const handlePageChange = (_, value) => {
         setPage(value);
@@ -73,38 +64,15 @@ function Categories() {
 
     const handleLimitChange = (event) => {
         setLimit(event.target.value);
-        setPage(1);
-    };
-
-    const handleCategoryChange = (event) => {
-        setSelectedCategory(event.target.value);
-        setPage(1);
+        setPage(1); // Reset to first page when changing limit
     };
 
     return (
         <Container sx={{ mt: 4 }}>
             <TopReactions />
             <Typography variant="h4" gutterBottom>
-                Browse Events by Category
+                Events tagged with "{tagName}"
             </Typography>
-
-            <Box sx={{ mb: 3, display: "flex", gap: 2 }}>
-                <FormControl size="small" sx={{ minWidth: 200 }}>
-                    <InputLabel id="category-select-label">Category</InputLabel>
-                    <Select
-                        labelId="category-select-label"
-                        value={selectedCategory}
-                        label="Category"
-                        onChange={handleCategoryChange}
-                    >
-                        {categories.map(cat => (
-                            <MenuItem key={cat.id} value={cat.id}>
-                                {cat.name}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </Box>
 
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
@@ -113,7 +81,7 @@ function Categories() {
             ) : error ? (
                 <Alert severity="error">{error}</Alert>
             ) : events.length === 0 ? (
-                <Alert severity="info">No events found for this category.</Alert>
+                <Alert severity="info">No events found with this tag.</Alert>
             ) : (
                 <>
                     <Grid container spacing={3} justifyContent="center" alignItems="flex-start">
@@ -123,7 +91,7 @@ function Categories() {
                                     title={event.title}
                                     description={event.description}
                                     date={new Date(event.event_datetime || event.created_at).toLocaleDateString()}
-                                    category={categories.find(c => c.id === event.category_id)?.name || "Unknown"}
+                                    category={categories[event.category_id] || "Unknown"}
                                     onClick={() => navigate(`/event/${event.id}`)}
                                 />
                             </Grid>
@@ -176,4 +144,4 @@ function Categories() {
     );
 }
 
-export default Categories;
+export default Tag;

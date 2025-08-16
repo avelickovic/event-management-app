@@ -167,4 +167,28 @@ exports.changeStatus = async (req, res) => {
     }
 
 }
+exports.getUserNameById = async (req,res) => {
+    const { userId } = req.params;
+    if (!userId) {
+        return res.status(400).json({ message: "User ID is required." });
+    }
+    try {
+        const [rows] = await db.query(
+            "SELECT first_name, last_name FROM users WHERE id = ?",
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        return res.status(200).json({
+            firstName: rows[0].first_name,
+            lastName: rows[0].last_name
+        });
+    } catch (error) {
+        console.error("Error fetching user name by ID:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
+}
 

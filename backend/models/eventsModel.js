@@ -78,24 +78,85 @@ exports.createEvent = async (req, res) => {
 };
 
 
-exports.getEventById = async (eventId) => {
-    try {
-        const [rows] = await db.query("SELECT * FROM events WHERE id = ?", [eventId]);
-        return rows.length > 0 ? rows[0] : null;
-    } catch (error) {
-        console.error("Error fetching event by ID:", error);
-        throw error;
+    exports.getEventById = async (req,res) => {
+        const { id } = req.params;
+
+        try {
+            const [rows] = await db.query("SELECT * FROM events WHERE id = ?", [id]);
+
+            console.log("Rows fetched:", rows.length > 0 ? rows[0] : null);
+            return res.status(200).json(rows.length > 0 ? rows[0] : { message: "Event not found." });
+        } catch (error) {
+            console.error("Error fetching event by ID:", error);
+            res.status(500).json({ message: "Internal server error." });
+            throw error;
+        }
     }
-}
 exports.getAllEvents = async (req, res) => {
     try {
         const [rows] = await db.query("SELECT * FROM events");
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No events found." });
+        }
         return res.status(200).json(rows);
     } catch (error) {
         console.error("Error fetching all events:", error);
         return res.status(500).json({ message: "Server error." });
     }
 
+}
+exports.getAllEventsSortedByDateCreated = async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT * FROM events  ORDER BY created_at DESC");
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No events found." });
+        }
+        return res.status(200).json(rows);
+    } catch (error) {
+        console.error("Error fetching all events:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
+
+}
+exports.getAllEventsSortedByDateCreatedPagination = async (req, res) => {
+    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page) || 0;
+    const offset = page * limit;
+
+
+    try {
+        const [rows] = await db.query("SELECT * FROM events ORDER BY created_at DESC LIMIT ? OFFSET ?", [limit, offset]);
+        const [[{ total }]] = await db.query("SELECT COUNT(*) AS total FROM events");
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No events found." });
+        }
+
+        return res.status(200).json({
+            events: rows,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+
+    } catch (error) {
+        console.error("Error fetching all events with pagination:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
+}
+
+exports.get10EventsSortedByViews = async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT * FROM events WHERE event_datetime >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY views DESC LIMIT 10");
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No events found." });
+        }
+        return res.status(200).json(rows);
+
+    } catch (error) {
+        console.error("Error fetching top 10 events by views:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
 }
 exports.updateEvent = async (req, res) => {
     const { eventId } = req.params;
@@ -119,6 +180,7 @@ exports.updateEvent = async (req, res) => {
     const fields = [];
     const values = [];
 
+    // Collect fields to update
     for (const key in value) {
         if (key !== "tags" && value[key] !== undefined) {
             fields.push(`${key} = ?`);
@@ -130,7 +192,7 @@ exports.updateEvent = async (req, res) => {
         return res.status(400).json({ message: "No fields to update." });
     }
 
-    // Update event fields if present
+    // Update event fields
     if (fields.length > 0) {
         values.push(eventId);
         try {
@@ -141,17 +203,24 @@ exports.updateEvent = async (req, res) => {
         }
     }
 
-    // Handle tags if present
-    if (value.tags) {
-        const newTagList = value.tags.split(',').map(t => t.trim()).filter(Boolean);
-        const newTagIds = [];
+    // Handle tags
+    if (value.tags !== undefined) {
+        const newTagList = value.tags
+            .split(',')
+            .map(t => t.trim())
+            .filter(Boolean);
 
         try {
             // Get existing tag IDs for this event
-            const [existingRows] = await db.query("SELECT tag_id FROM event_tags WHERE event_id = ?", [eventId]);
-            const existingTagIds = existingRows.map(row => row.tag_id);
+            const [existingRows] = await db.query(
+                "SELECT tag_id FROM event_tags WHERE event_id = ?",
+                [eventId]
+            );
+            const existingTagIds = existingRows.map(r => r.tag_id);
 
-            // Map tag names to IDs (insert if needed)
+            const newTagIds = [];
+
+            // Insert new tags if they don't exist
             for (const tagName of newTagList) {
                 const [rows] = await db.query("SELECT id FROM tags WHERE name = ?", [tagName]);
                 let tagId;
@@ -164,22 +233,32 @@ exports.updateEvent = async (req, res) => {
                 newTagIds.push(tagId);
             }
 
-            // Calculate tags to remove
+            // Remove links for tags no longer associated
             const tagsToRemove = existingTagIds.filter(id => !newTagIds.includes(id));
             if (tagsToRemove.length > 0) {
                 await db.query(
                     `DELETE FROM event_tags WHERE event_id = ? AND tag_id IN (${tagsToRemove.map(() => '?').join(',')})`,
                     [eventId, ...tagsToRemove]
                 );
+
+                // Delete tags from tags table if no other events are using them
+                for (const tagId of tagsToRemove) {
+                    const [countRows] = await db.query(
+                        "SELECT COUNT(*) as cnt FROM event_tags WHERE tag_id = ?",
+                        [tagId]
+                    );
+                    if (countRows[0].cnt === 0) {
+                        await db.query("DELETE FROM tags WHERE id = ?", [tagId]);
+                    }
+                }
             }
 
-            // Add new tag links if not already present
+            // Add links for new tags not already associated
             for (const tagId of newTagIds) {
                 if (!existingTagIds.includes(tagId)) {
                     await db.query("INSERT INTO event_tags (event_id, tag_id) VALUES (?, ?)", [eventId, tagId]);
                 }
             }
-
         } catch (err) {
             console.error("Error updating tags:", err);
             return res.status(500).json({ message: "Internal server error while updating tags." });
@@ -188,6 +267,7 @@ exports.updateEvent = async (req, res) => {
 
     return res.status(200).json({ message: "Event updated successfully." });
 };
+
 exports.searchEvents = async (req, res) => {
     const { searchTerm } = req.query;
 
@@ -214,7 +294,7 @@ exports.incrementLikeCount = async (req, res) => {
     }
 
     if (req.session.likedEvents.includes(eventId)) {
-        return res.status(403).json({ message: "You already liked this event." });
+        return res.status(403).json({ message: "You already reacted to this event." });
     }
 
     try {
@@ -242,7 +322,7 @@ exports.incrementDislikeCount = async (req, res) => {
     }
 
     if (req.session.likedEvents.includes(eventId)) {
-        return res.status(403).json({ message: "You already disliked this event." });
+        return res.status(403).json({ message: "You already reacted to this event" });
     }
 
     try {
@@ -262,30 +342,44 @@ exports.incrementDislikeCount = async (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 }
-exports.incrementViewCount = async (req, res) => {
-    const { eventId } = req.params;
-    if(!req.session.viewedevents) {
-        req.session.viewedevents = [];
-    }
-    if (req.session.viewedevents.includes(eventId)) {
-        return res.status(403).json({ message: "You already viewed this event." });
-    }
-    try {
-        const [result] = await db.query(
-            "UPDATE events SET views = views + 1 WHERE id = ?",
-            [eventId]
-        );
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Event not found." });
+exports.incrementViewCount = async (req, res) => {
+    const { id } = req.params;
+    const eventIdStr = String(id);
+
+    // Initialize session array
+    if (!req.session.viewedevents) req.session.viewedevents = [];
+
+    try {
+        // Already viewed in this session → return current views
+        if (req.session.viewedevents.includes(eventIdStr)) {
+            const [rows] = await db.query(
+                "SELECT * FROM events WHERE id = ?",
+                [id]
+            );
+            if (!rows.length) return res.status(404).json({ message: "Event not found." });
+            return res.status(200).json(rows[0]); // return full event
         }
-        req.session.viewedevents.push(eventId);
-        return res.status(200).json({ success: true });
-    } catch (error) {
-        console.error("Error incrementing view count:", error);
+
+        // Mark as viewed
+        req.session.viewedevents.push(eventIdStr);
+
+        // Increment views
+        await db.query("UPDATE events SET views = views + 1 WHERE id = ?", [id]);
+
+        // Fetch updated event
+        const [rows] = await db.query("SELECT * FROM events WHERE id = ?", [id]);
+        if (!rows.length) return res.status(404).json({ message: "Event not found." });
+
+        return res.status(200).json(rows[0]); // return full event
+    } catch (err) {
+        console.error("Error incrementing view count:", err);
         return res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
+
+
 exports.deleteEvent = async (req, res) => {
     const { eventId } = req.params;
 
@@ -306,3 +400,128 @@ exports.deleteEvent = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 }
+exports.getEventsByTag = async (req, res) => {
+    const { id } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    try {
+        const [events] = await db.query(
+            `SELECT e.*
+             FROM events e
+             JOIN event_tags et ON e.id = et.event_id
+             WHERE et.tag_id = ?
+             ORDER BY e.created_at DESC
+             LIMIT ? OFFSET ?`,
+            [id, limit, offset]
+        );
+
+        const [[{ total }]] = await db.query(
+            `SELECT COUNT(*) AS total
+             FROM events e
+             JOIN event_tags et ON e.id = et.event_id
+             WHERE et.tag_id = ?`,
+            [id]
+        );
+
+        res.status(200).json({
+            events,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error("Error fetching events by tag:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+exports.getRelatedEvents = async (req, res) => {
+    const { eventId } = req.params;
+    console.log("Fetching event with id ",eventId);
+    if (!eventId) {
+        return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    try {
+        // 1. Get all tags for the current event
+        const [tags] = await db.query(
+            "SELECT tag_id FROM event_tags WHERE event_id = ?",
+            [eventId]
+        );
+
+        if (!tags.length) {
+            return res.json({ relatedEvents: [] });
+        }
+
+        const tagIds = tags.map(t => t.tag_id);
+
+        // 2. Get up to 3 events sharing at least one tag, excluding the current event
+        const [relatedEvents] = await db.query(
+            `SELECT DISTINCT e.*
+             FROM events e
+             JOIN event_tags et ON e.id = et.event_id
+             WHERE et.tag_id IN (?)
+             AND e.id != ?
+             LIMIT 3`,
+            [tagIds, eventId]
+        );
+
+        res.json({ relatedEvents });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to fetch related events" });
+    }
+};
+exports.getTopReactions = async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT e.id, e.title, e.likes, e.dislikes
+             FROM events e
+             ORDER BY (e.likes - e.dislikes) DESC
+             LIMIT 3`
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "No events found." });
+        }
+
+        return res.status(200).json(rows);
+    } catch (error) {
+        console.error("Error fetching top reactions:", error);
+        return res.status(500).json({ message: "Server error." });
+    }
+}
+exports.getEventsByCategory = async (req, res) => {
+    const { categoryId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    try {
+        const [events] = await db.query(
+            `SELECT * FROM events WHERE category_id = ? LIMIT ? OFFSET ?`,
+            [categoryId, limit, offset]
+        );
+
+        const [[{ total }]] = await db.query(
+            `SELECT COUNT(*) AS total FROM events WHERE category_id = ?`,
+            [categoryId]
+        );
+
+        res.status(200).json({
+            events,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error("Error fetching events by category:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+
+

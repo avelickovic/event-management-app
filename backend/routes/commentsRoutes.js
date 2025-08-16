@@ -3,7 +3,7 @@ const router = express.Router();
 const commentsModel = require("../models/commentsModel");
 router.post("/", commentsModel.createComment);
 router.get("/", commentsModel.getAllComments);
-router.get("/:eventId", commentsModel.getCommentsByEventId);
+router.get("/:eventId", commentsModel.getCommentsByEventIdByDate);
 router.patch("/like/:commentId", commentsModel.incrementLikeCount);
 router.patch("/dislike/:commentId", commentsModel.incrementDislikeCount);
 module.exports = router;

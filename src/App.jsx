@@ -11,6 +11,8 @@ const Categories=lazy(()=> import("./pages/Categories.jsx"));
 const Events=lazy(()=> import("./pages/Events.jsx"));
 const UserCategories=lazy(()=> import("./pages/UserCategories.jsx"));
 const Users=lazy(()=> import("./pages/Users.jsx"));
+const EventDetail = lazy(() => import("./pages/EventDetails.jsx"));
+const Tags = lazy(() => import("./pages/Tag.jsx"));
 const PrivateRoute = ({element}) => {
     return isAuthenticated() ? element : <Navigate to="/login"/>;
 };
@@ -28,6 +30,8 @@ export default function App() {
                 <Route path="/userCategories" element={<PrivateRoute element={<UserCategories />} />} />
                 <Route path="/users" element={<PrivateRoute element={<Users />} />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/event/:id" element={<EventDetail />} />
+                <Route path="/tags/:tagName" element={<Tags />} />
             </Routes>
         </Router>
     );

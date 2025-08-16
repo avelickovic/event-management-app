@@ -9,23 +9,38 @@ exports.createComment = async (req, res) => {
 
     try {
         const [result] = await db.query(
-            "INSERT INTO comments (author_name, content,created_at,event_id) VALUES (?, ?, NOW(),?)",
+            "INSERT INTO comments (author_name, content, created_at, event_id) VALUES (?, ?, NOW(), ?)",
             [userName, content, eventId]
         );
 
-        res.status(201).json({ commentId: result.insertId });
+        const [rows] = await db.query(
+            "SELECT id, author_name AS authorName, content, likes, dislikes, created_at FROM comments WHERE id = ?",
+            [result.insertId]
+        );
+
+        res.status(201).json(rows[0]); // Send the full new comment object
     } catch (error) {
         console.error("Error creating comment:", error);
         res.status(500).json({ message: "Internal server error." });
     }
-}
-exports.getCommentsByEventId = async (req,res) => {
+};
+
+exports.getCommentsByEventIdByDate = async (req,res) => {
     const {eventId}= req.params;
     console.log(req);
     console.log(eventId);
 
     try {
-        const [rows] = await db.query("SELECT * FROM comments WHERE event_id = ?", [eventId]);
+        const [rows] = await db.query("SELECT \n" +
+            "    id, \n" +
+            "    author_name AS authorName, \n" +
+            "    content, \n" +
+            "    likes, \n" +
+            "    dislikes, \n" +
+            "    created_at \n" +
+            "FROM comments \n" +
+            "WHERE event_id = ?\n" +
+            "ORDER BY created_at DESC\n", [eventId]);
         return res.status(200).json(rows);
     } catch (error) {
         console.error("Error fetching comments by event ID:", error);
@@ -49,7 +64,7 @@ exports.incrementLikeCount = async (req, res) => {
     }
 
     if (req.session.likedComments.includes(commentId)) {
-        return res.status(403).json({ message: "You already liked this comment." });
+        return res.status(403).json({ message: "You already reacted to this comment." });
     }
 
     try {
@@ -74,7 +89,7 @@ exports.incrementDislikeCount = async (req,res) => {
     }
 
     if (req.session.likedComments.includes(commentId)) {
-        return res.status(403).json({ message: "You already disliked this comment." });
+        return res.status(403).json({ message: "You already reacted to this comment." });
     }
     try {
         const [result] = await db.query(

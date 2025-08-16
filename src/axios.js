@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 const config = {
     baseURL: 'http://localhost:3001', // Osnova URL-a na nasem backendu
     timeout: 60000, // Timeout (opciono) koliko maksimalno cekamo odgovor
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json', // Podrazumevani Content-Type
     },
