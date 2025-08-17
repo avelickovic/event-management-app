@@ -12,7 +12,7 @@ export default function Card({ title, description, date, category, onClick }) {
                 textAlign: "center",
                 background: "linear-gradient(145deg, #ffffff, #f5f5f5)",
                 transition: "transform 0.2s ease, box-shadow 0.2s ease",
-                cursor: "pointer", // <-- show pointer
+                cursor: "pointer",
                 "&:hover": {
                     transform: "translateY(-5px)",
                     boxShadow: 8,

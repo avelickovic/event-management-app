@@ -58,7 +58,7 @@ export default function EventDetails() {
     const [currentUser, setCurrentUser] = useState(null);
     const [relatedEvents, setRelatedEvents] = useState([]);
 
-    // Fetch event, tags and comments
+
     const fetchEvent = useCallback(async () => {
         setLoading(true);
         setError("");
@@ -66,11 +66,11 @@ export default function EventDetails() {
             const resp = await _axios.get(`/api/events/getEvent/${id}`);
             setEvent(resp.data);
 
-            // Fetch tags
+
             const tagsResp = await _axios.get(`/api/tags/${id}`);
             setTags(tagsResp.data.map(t => t.name));
 
-            // Fetch comments
+
             const cResp = await _axios.get(`/api/comments/${id}`);
             setComments(Array.isArray(cResp.data) ? cResp.data : []);
         } catch (e) {
@@ -85,7 +85,8 @@ export default function EventDetails() {
         fetchEvent();
     }, [fetchEvent]);
 
-    // Increment views
+
+
     useEffect(() => {
         const incrementViews = async () => {
             if (viewIncremented.current) return;
@@ -220,7 +221,7 @@ export default function EventDetails() {
                         {event.category && <Chip icon={<CategoryIcon />} label={`Category: ${event.category}`} />}
                     </Stack>
 
-                    {/* TAGS */}
+
                     {tags.length > 0 && (
                         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
                             {tags.map((t) => (
@@ -249,7 +250,7 @@ export default function EventDetails() {
                 </CardContent>
             </Card>
 
-            {/* COMMENTS SECTION */}
+
             <Card>
                 <CardContent>
                     <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Comments</Typography>

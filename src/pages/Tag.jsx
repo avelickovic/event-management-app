@@ -34,7 +34,6 @@ function Tag() {
             setTotal(eventsRes.data.total || 0);
             setTotalPages(Math.max(1, eventsRes.data.totalPages || 1));
 
-            // Reset to page 1 if current page is beyond total pages
             if (currentPage > eventsRes.data.totalPages && eventsRes.data.totalPages > 0) {
                 setPage(1);
             }
@@ -64,7 +63,7 @@ function Tag() {
 
     const handleLimitChange = (event) => {
         setLimit(event.target.value);
-        setPage(1); // Reset to first page when changing limit
+        setPage(1);
     };
 
     return (

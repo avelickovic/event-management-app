@@ -19,20 +19,20 @@ exports.createEvent = async (req, res) => {
 
     const { title, description, event_datetime, location, author_id, category_id, max_capacity, tags } = req.body;
 
-    // Format datetime for MySQL DATETIME column
+
     const mysqlDatetime = new Date(event_datetime).toISOString().slice(0, 19).replace('T', ' ');
 
     const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
     const tagIds = [];
 
     try {
-        // For each tag: check if exists, else insert, then get ID
+
         for (const tagName of tagList) {
             const [rows] = await db.query("SELECT id FROM tags WHERE name = ?", [tagName]);
 
             let tagId;
             if (rows.length > 0) {
-                tagId = rows[0].id; // Tag exists
+                tagId = rows[0].id;
             } else {
                 const [insertResult] = await db.query("INSERT INTO tags (name) VALUES (?)", [tagName]);
                 tagId = insertResult.insertId;
@@ -58,7 +58,6 @@ exports.createEvent = async (req, res) => {
     }
 
     try {
-        // Link event with tags
         for (const tagId of tagIds) {
             await db.query(
                 "INSERT INTO event_tags (event_id, tag_id) VALUES (?, ?)",
@@ -169,7 +168,7 @@ exports.updateEvent = async (req, res) => {
         author_id: Joi.number().integer(),
         category_id: Joi.number().integer(),
         max_capacity: Joi.number().integer().min(1),
-        tags: Joi.string() // Comma-separated tag string (optional)
+        tags: Joi.string()
     });
 
     const { error, value } = schema.validate(req.body);
@@ -180,7 +179,6 @@ exports.updateEvent = async (req, res) => {
     const fields = [];
     const values = [];
 
-    // Collect fields to update
     for (const key in value) {
         if (key !== "tags" && value[key] !== undefined) {
             fields.push(`${key} = ?`);
@@ -192,7 +190,6 @@ exports.updateEvent = async (req, res) => {
         return res.status(400).json({ message: "No fields to update." });
     }
 
-    // Update event fields
     if (fields.length > 0) {
         values.push(eventId);
         try {
@@ -203,7 +200,6 @@ exports.updateEvent = async (req, res) => {
         }
     }
 
-    // Handle tags
     if (value.tags !== undefined) {
         const newTagList = value.tags
             .split(',')
@@ -211,7 +207,6 @@ exports.updateEvent = async (req, res) => {
             .filter(Boolean);
 
         try {
-            // Get existing tag IDs for this event
             const [existingRows] = await db.query(
                 "SELECT tag_id FROM event_tags WHERE event_id = ?",
                 [eventId]
@@ -220,7 +215,6 @@ exports.updateEvent = async (req, res) => {
 
             const newTagIds = [];
 
-            // Insert new tags if they don't exist
             for (const tagName of newTagList) {
                 const [rows] = await db.query("SELECT id FROM tags WHERE name = ?", [tagName]);
                 let tagId;
@@ -233,7 +227,6 @@ exports.updateEvent = async (req, res) => {
                 newTagIds.push(tagId);
             }
 
-            // Remove links for tags no longer associated
             const tagsToRemove = existingTagIds.filter(id => !newTagIds.includes(id));
             if (tagsToRemove.length > 0) {
                 await db.query(
@@ -241,7 +234,6 @@ exports.updateEvent = async (req, res) => {
                     [eventId, ...tagsToRemove]
                 );
 
-                // Delete tags from tags table if no other events are using them
                 for (const tagId of tagsToRemove) {
                     const [countRows] = await db.query(
                         "SELECT COUNT(*) as cnt FROM event_tags WHERE tag_id = ?",
@@ -253,7 +245,6 @@ exports.updateEvent = async (req, res) => {
                 }
             }
 
-            // Add links for new tags not already associated
             for (const tagId of newTagIds) {
                 if (!existingTagIds.includes(tagId)) {
                     await db.query("INSERT INTO event_tags (event_id, tag_id) VALUES (?, ?)", [eventId, tagId]);
@@ -269,23 +260,39 @@ exports.updateEvent = async (req, res) => {
 };
 
 exports.searchEvents = async (req, res) => {
-    const { searchTerm } = req.query;
+    const { searchTerm, page = 1, limit = 10 } = req.query;
 
     if (!searchTerm) {
         return res.status(400).json({ message: "Search term is required." });
     }
 
+    const offset = (page - 1) * limit;
+
     try {
-        const [rows] = await db.query(
-            "SELECT * FROM events WHERE title LIKE ? OR description LIKE ?",
+
+        const [[{ total }]] = await db.query(
+            "SELECT COUNT(*) as total FROM events WHERE title LIKE ? OR description LIKE ?",
             [`%${searchTerm}%`, `%${searchTerm}%`]
         );
-        res.status(200).json(rows);
+
+
+        const [rows] = await db.query(
+            "SELECT * FROM events WHERE title LIKE ? OR description LIKE ? LIMIT ? OFFSET ?",
+            [`%${searchTerm}%`, `%${searchTerm}%`, parseInt(limit), parseInt(offset)]
+        );
+
+        res.status(200).json({
+            events: rows,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / limit),
+        });
     } catch (error) {
         console.error("Error searching events:", error);
         res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
 exports.incrementLikeCount = async (req, res) => {
     const { eventId } = req.params;
     console.log(eventId);
@@ -347,31 +354,26 @@ exports.incrementViewCount = async (req, res) => {
     const { id } = req.params;
     const eventIdStr = String(id);
 
-    // Initialize session array
     if (!req.session.viewedevents) req.session.viewedevents = [];
 
     try {
-        // Already viewed in this session → return current views
         if (req.session.viewedevents.includes(eventIdStr)) {
             const [rows] = await db.query(
                 "SELECT * FROM events WHERE id = ?",
                 [id]
             );
             if (!rows.length) return res.status(404).json({ message: "Event not found." });
-            return res.status(200).json(rows[0]); // return full event
+            return res.status(200).json(rows[0]);
         }
 
-        // Mark as viewed
         req.session.viewedevents.push(eventIdStr);
 
-        // Increment views
         await db.query("UPDATE events SET views = views + 1 WHERE id = ?", [id]);
 
-        // Fetch updated event
         const [rows] = await db.query("SELECT * FROM events WHERE id = ?", [id]);
         if (!rows.length) return res.status(404).json({ message: "Event not found." });
 
-        return res.status(200).json(rows[0]); // return full event
+        return res.status(200).json(rows[0]);
     } catch (err) {
         console.error("Error incrementing view count:", err);
         return res.status(500).json({ message: "Internal server error" });
@@ -445,7 +447,6 @@ exports.getRelatedEvents = async (req, res) => {
     }
 
     try {
-        // 1. Get all tags for the current event
         const [tags] = await db.query(
             "SELECT tag_id FROM event_tags WHERE event_id = ?",
             [eventId]
@@ -457,7 +458,6 @@ exports.getRelatedEvents = async (req, res) => {
 
         const tagIds = tags.map(t => t.tag_id);
 
-        // 2. Get up to 3 events sharing at least one tag, excluding the current event
         const [relatedEvents] = await db.query(
             `SELECT DISTINCT e.*
              FROM events e

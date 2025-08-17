@@ -13,18 +13,30 @@ async function findUserByEmail(email) {
 }
 exports.findUserByEmail = findUserByEmail;
 
+
+
+const userSchema = Joi.object({
+    email: Joi.string().email().required(),
+    first_name: Joi.string().min(1).required(),
+    last_name: Joi.string().min(1).required(),
+    user_type: Joi.string().valid('admin', 'user', 'manager').required(),
+    password: Joi.string().min(6).required()
+});
+
 exports.createUser = async (req, res) => {
     try {
-        const { email, name, lastname, type, password } = req.body;
-        if (!email || !name || !lastname || !type || !password) {
-            return res.status(400).json({ message: "All fields are required." });
+        const { error, value } = userSchema.validate(req.body);
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
         }
+
+        const { email, first_name, last_name, user_type, password } = value;
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const [result] = await db.query(
             "INSERT INTO users (email, first_name, last_name, user_type, status, password_hash) VALUES (?, ?, ?, ?, 'active', ?)",
-            [email, name, lastname, type, hashedPassword]
+            [email, first_name, last_name, user_type, hashedPassword]
         );
 
         return res.status(201).json({ userId: result.insertId });
@@ -33,6 +45,7 @@ exports.createUser = async (req, res) => {
         return res.status(500).json({ message: "Server error." });
     }
 };
+
 exports.getUserById = async (req,res) => {
     const { userId } = req.params;
     if (!userId) {
@@ -55,17 +68,30 @@ exports.getUserById = async (req,res) => {
         return res.status(500).json({ message: "Server error." });
     }
 };
-exports.getAllUsers= async (req, res) => {
+exports.getAllUsers = async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT * FROM users");
-        return res.status(200).json(rows);
+        const page = parseInt(req.query.page, 10) || 0;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const offset = page * limit;
 
-    }
-    catch (error) {
+
+        const [[{ total }]] = await db.query("SELECT COUNT(*) as total FROM users");
+
+
+        const [rows] = await db.query("SELECT * FROM users LIMIT ? OFFSET ?", [limit, offset]);
+
+        return res.status(200).json({
+            users: rows,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit),
+        });
+    } catch (error) {
         console.error("Error fetching all users:", error);
         return res.status(500).json({ message: "Server error." });
     }
-}
+};
+
 exports.updateUser = async (req, res) => {
     const { userId } = req.params;
 
@@ -120,7 +146,6 @@ exports.updateUser = async (req, res) => {
             return res.status(404).json({ message: "User not found." });
         }
 
-        // Return updated user
         const [rows] = await db.query(
             "SELECT id, email, first_name , last_name, user_type FROM users WHERE id = ?",
             [userId]
@@ -138,12 +163,17 @@ exports.updateUser = async (req, res) => {
 };
 exports.changeStatus = async (req, res) => {
     const { userId } = req.params;
+    console.log("User ID:", userId);
     if (!userId) {
         return res.status(400).json({ message: "User ID is required." });
     }
 
     try {
-        const user= await this.getUserById(userId);
+        const [rows] = await db.query(
+            "SELECT id, status, user_type FROM users WHERE id = ?",
+            [userId]
+        );
+        const user = rows[0];
         if (!user) {
             return res.status(404).json({ message: "User not found." });
         }

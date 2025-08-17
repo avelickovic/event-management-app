@@ -20,57 +20,61 @@ import {
 import MenuIcon from "@mui/icons-material/Menu";
 import SearchIcon from "@mui/icons-material/Search";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { isAuthenticated as authCheck, getUserId as fetchUserId, isAdmin as adminCheck, logout } from "../tools/auth.js";
+import {
+    isAuthenticated as authCheck,
+    getUserId as fetchUserId,
+    isAdmin as adminCheck,
+    logout,
+} from "../tools/auth.js";
 import _axios from "../axios.js";
 
 const guestPages = [
     { name: "Home", path: "/" },
     { name: "Trending", path: "/trending" },
     { name: "Categories", path: "/categories" },
-
 ];
+
 const userPages = [
     { name: "Events", path: "/events" },
     { name: "Categories", path: "/userCategories" },
 ];
+
 const adminPages = [
     { name: "Events", path: "/events" },
     { name: "Categories", path: "/userCategories" },
-    {name: "Users", path: "/users"},
+    { name: "Users", path: "/users" },
 ];
-
-
 
 export default function Navbar() {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [username, setUsername] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
     const navigate = useNavigate();
 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-    const toggleDrawer = () => {
-        setDrawerOpen(!drawerOpen);
-    };
+    const toggleDrawer = () => setDrawerOpen(!drawerOpen);
 
     const isAuthenticated = useCallback(authCheck, []);
     const isAdmin = useCallback(adminCheck, []);
+    const getUserId = useCallback(fetchUserId, []);
 
     const pagesToShow = !isAuthenticated()
         ? guestPages
         : isAdmin()
             ? adminPages
             : userPages;
-    const getUserId = useCallback(fetchUserId, []);
 
     const handleAuthAction = () => {
         if (isAuthenticated()) {
-            setUsername(""); // Clear immediately on logout
+            setUsername("");
             logout(navigate);
         } else {
             navigate("/login");
         }
     };
+
 
     useEffect(() => {
         const fetchUsername = async () => {
@@ -81,30 +85,45 @@ export default function Navbar() {
                     return;
                 }
                 const response = await _axios.get(`/api/users/${userId}`);
-                const user = response.data;
-                setUsername(user.first_name);
+                setUsername(response.data.first_name);
             } catch (error) {
                 console.error("Error fetching username:", error);
                 setUsername("Guest");
             }
         };
 
-        if (isAuthenticated()) {
-            fetchUsername();
-        } else {
-            setUsername("Guest");
-        }
-    }, [isAuthenticated(), getUserId()]); // Depend on actual values
+        if (isAuthenticated()) fetchUsername();
+        else setUsername("Guest");
+    }, [isAuthenticated(), getUserId]);
 
-    const handleSearch = (e) => {
-        if (e.key === "Enter") {
-            console.log("Searching for:", e.target.value);
-            setDrawerOpen(false);
+    const handleSearchKeyDown = (e) => {
+        if (e.key === "Enter" && searchTerm.trim()) {
+            if (isAuthenticated()) {
+                navigate(`/authsearch?term=${encodeURIComponent(searchTerm)}`);
+            } else {
+                navigate(`/search?term=${encodeURIComponent(searchTerm)}`);
+            }
+            setSearchTerm("");
+            if (isMobile) setDrawerOpen(false);
         }
     };
 
+    const handleSearchClick = () => {
+        if (!searchTerm.trim()) return;
+        if (isAuthenticated()) {
+            navigate(`/authsearch?term=${encodeURIComponent(searchTerm)}`);
+        } else {
+            navigate(`/search?term=${encodeURIComponent(searchTerm)}`);
+        }
+        setSearchTerm("");
+        if (isMobile) setDrawerOpen(false);
+    };
+
+
     const drawer = (
-        <Box sx={{ width: 250 }} role="presentation" onKeyDown={toggleDrawer}>
+        <Box sx={{ width: 250 }} role="presentation"  onKeyDown={(e) => {
+            if (e.key === "Escape") toggleDrawer();
+        }}>
             <Box
                 sx={{
                     display: "flex",
@@ -112,8 +131,7 @@ export default function Navbar() {
                     px: 2,
                     py: 1,
                     mt: 1,
-                    backgroundColor: (theme) =>
-                        alpha(theme.palette.primary.main, 0.08),
+                    backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
                     borderRadius: 1,
                     mx: 1,
                 }}
@@ -121,7 +139,9 @@ export default function Navbar() {
                 <SearchIcon sx={{ mr: 1 }} />
                 <InputBase
                     placeholder="Search…"
-                    onKeyDown={handleSearch}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
                     fullWidth
                 />
             </Box>
@@ -140,10 +160,7 @@ export default function Navbar() {
                 <ListItem disablePadding>
                     {isAuthenticated() ? (
                         <Box sx={{ textAlign: "center", width: "100%" }}>
-                            <Typography
-                                variant="subtitle1"
-                                sx={{ mb: 1, fontWeight: "bold" }}
-                            >
+                            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: "bold" }}>
                                 {username}
                             </Typography>
                             <ListItemButton
@@ -176,15 +193,6 @@ export default function Navbar() {
         <AppBar position="static">
             <Toolbar sx={{ display: "flex", justifyContent: "space-between" }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Typography
-                        variant="h6"
-                        component={RouterLink}
-                        to="/"
-                        color="inherit"
-                        sx={{ textDecoration: "none" }}
-                    >
-                        MyApp
-                    </Typography>
 
                     {!isMobile &&
                         pagesToShow.map((page) => (
@@ -201,6 +209,32 @@ export default function Navbar() {
                 </Box>
 
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    {!isMobile && (
+                        <Box
+                            sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                backgroundColor: alpha(theme.palette.common.white, 0.15),
+                                "&:hover": {
+                                    backgroundColor: alpha(theme.palette.common.white, 0.25),
+                                },
+                                borderRadius: 1,
+                                px: 1,
+                            }}
+                        >
+                            <InputBase
+                                placeholder="Search…"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={handleSearchKeyDown}
+                                sx={{ color: "inherit", width: 200 }}
+                            />
+                            <IconButton color="inherit" onClick={handleSearchClick}>
+                                <SearchIcon />
+                            </IconButton>
+                        </Box>
+                    )}
+
                     {!isMobile && isAuthenticated() && (
                         <Typography
                             variant="subtitle1"
@@ -228,11 +262,7 @@ export default function Navbar() {
                             >
                                 <MenuIcon />
                             </IconButton>
-                            <Drawer
-                                anchor="left"
-                                open={drawerOpen}
-                                onClose={toggleDrawer}
-                            >
+                            <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer}>
                                 {drawer}
                             </Drawer>
                         </>

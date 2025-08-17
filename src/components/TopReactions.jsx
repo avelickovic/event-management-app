@@ -26,7 +26,7 @@ function TopReactions() {
             elevation={3}
             sx={{
                 position: isSmallScreen ? "relative" : "fixed",
-                top: isSmallScreen ? "auto" : 80, // adjust for navbar height
+                top: isSmallScreen ? "auto" : 80,
                 right: isSmallScreen ? "auto" : 20,
                 p: 2,
                 width: isSmallScreen ? "100%" : 250,

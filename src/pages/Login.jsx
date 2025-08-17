@@ -18,7 +18,7 @@ export default function Login() {
     const navigate = useNavigate();
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Replace with your login logic
+
         try{
             const response = await _axios.post("/api/users/login", { email, password });
 

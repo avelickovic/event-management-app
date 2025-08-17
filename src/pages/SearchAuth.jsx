@@ -12,8 +12,6 @@ import {
     TablePagination,
     IconButton,
     TextField,
-    Select,
-    MenuItem,
     Paper,
     Snackbar,
     Alert,
@@ -21,14 +19,23 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
+    Select,
+    MenuItem,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import _axios from "../axios.js";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { getUserId } from "../tools/auth.js";
 
-export default function Events() {
+function useQuery() {
+    return new URLSearchParams(useLocation().search);
+}
+
+export default function SearchEventsPage() {
+    const query = useQuery();
+    const initialTerm = query.get("term") || "";
+
     const [events, setEvents] = useState([]);
     const [categories, setCategories] = useState([]);
     const [page, setPage] = useState(0);
@@ -48,36 +55,34 @@ export default function Events() {
     const [openForm, setOpenForm] = useState(false);
 
     const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+    const [searchTerm, setSearchTerm] = useState(initialTerm);
+    const [submittedTerm, setSubmittedTerm] = useState(initialTerm);
+
     const navigate = useNavigate();
 
     useEffect(() => {
-        fetchEvents(page, rowsPerPage);
-    }, [page, rowsPerPage]);
-
-    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const res = await _axios.get("/api/categories");
+                setCategories(res.data.data || []);
+            } catch (err) {
+                console.error("Error fetching categories", err);
+                setCategories([]);
+            }
+        };
         fetchCategories();
     }, []);
 
-    const fetchCategories = async () => {
+    const fetchEvents = async (pageNum = page, limit = rowsPerPage) => {
+        if (!submittedTerm) return;
         try {
-            const res = await _axios.get("/api/categories");
-            setCategories(res.data.data || []);
-        } catch (err) {
-            console.error("Error fetching categories", err);
-            setCategories([]);
-        }
-    };
+            const res = await _axios.get("/api/events/search", {
+                params: { searchTerm: submittedTerm, page: pageNum + 1, limit },
+            });
 
-    const fetchEvents = async (page = 0, limit = rowsPerPage) => {
-        try {
-            const res = await _axios.get(`/api/events/eventsbydatepagination?page=${page}&limit=${limit}`);
-            let eventsData = res.data.events || [];
-
-            eventsData = await Promise.all(
-                eventsData.map(async (event) => {
-                    const tagsRes = await _axios.get(`/api/tags/${event.id}`);
-                    const tagsArray = tagsRes.data.map(t => t.name);
-
+            const enrichedEvents = await Promise.all(
+                (res.data.events || []).map(async (event) => {
                     let authorName = event.author_id;
                     try {
                         const userRes = await _axios.get(`/api/users/getUserNameById/${event.author_id}`);
@@ -86,30 +91,65 @@ export default function Events() {
                         console.error("Error fetching author name", err);
                     }
 
-                    return {
-                        ...event,
-                        tags: tagsArray,
-                        authorName
-                    };
+                    let tagsArray = [];
+                    try {
+                        const tagsRes = await _axios.get(`/api/tags/${event.id}`);
+                        tagsArray = tagsRes.data.map((t) => t.name);
+                    } catch (err) {
+                        console.error("Error fetching tags", err);
+                    }
+
+                    return { ...event, authorName, tags: tagsArray };
                 })
             );
 
-            setEvents(eventsData);
+            setEvents(enrichedEvents);
             setTotal(res.data.total || 0);
-
-        } catch (error) {
-            console.error("Error fetching events", error);
+        } catch (err) {
+            console.error("Error fetching search results", err);
             setEvents([]);
             setTotal(0);
         }
     };
 
+    useEffect(() => {
+        if (submittedTerm) fetchEvents();
+    }, [page, rowsPerPage, submittedTerm]);
 
-
+    const handleSearch = () => {
+        setPage(0);
+        setSubmittedTerm(searchTerm.trim());
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData((prev) => ({ ...prev, [name]: value }));
+    };
+
+    const handleEdit = (event) => {
+        let tagsValue = Array.isArray(event.tags) ? event.tags.join(", ") : event.tags || "";
+        setFormData({
+            id: event.id,
+            title: event.title || "",
+            description: event.description || "",
+            dateTime: event.event_datetime ? new Date(event.event_datetime).toISOString().slice(0, 16) : "",
+            location: event.location || "",
+            categoryId: event.category_id?.toString() || "",
+            tags: tagsValue,
+            maxCapacity: event.max_capacity?.toString() || "",
+        });
+        setOpenForm(true);
+    };
+
+    const handleDelete = async (eventId) => {
+        try {
+            await _axios.delete(`/api/events/delete/${eventId}`);
+            showSnackbar("Event deleted", "success");
+            fetchEvents(page, rowsPerPage);
+        } catch (err) {
+            console.error("Delete error", err);
+            showSnackbar("Error deleting event", "error");
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -123,84 +163,42 @@ export default function Events() {
             category_id: formData.categoryId,
             max_capacity: formData.maxCapacity || null,
             tags: formData.tags,
-
         };
 
         try {
-            if (formData.id) {
-                await _axios.patch(`/api/events/update/${formData.id}`, payload);
-                showSnackbar("Event updated successfully", "success");
-            } else {
-                console.log(payload)
-                await _axios.post("/api/events/createEvent", payload);
-                showSnackbar("Event created successfully", "success");
-            }
-            fetchEvents(page, rowsPerPage);
+            if (formData.id) await _axios.patch(`/api/events/update/${formData.id}`, payload);
+            else await _axios.post("/api/events/createEvent", payload);
 
-            handleCloseForm();
+            showSnackbar(formData.id ? "Event updated" : "Event created", "success");
+            fetchEvents(page, rowsPerPage);
+            setOpenForm(false);
         } catch (err) {
-            console.error("Error submitting form Message: ", err.response.data.message);
+            console.error("Error submitting form", err);
             showSnackbar("Error submitting form", "error");
         }
     };
 
-    const handleEdit = (event) => {
-        let tagsValue = "";
-        if (Array.isArray(event.tags)) {
-            tagsValue = event.tags.join(", ");
-        } else if (typeof event.tags === "string") {
-            tagsValue = event.tags;
-        }
+    const showSnackbar = (message, severity) => setSnackbar({ open: true, message, severity });
 
-        setFormData({
-            id: event.id,
-            title: event.title || "",
-            description: event.description || "",
-            dateTime: event.event_datetime
-                ? new Date(event.event_datetime).toISOString().slice(0, 16)
-                : "",
-            location: event.location || "",
-            categoryId: event.category_id?.toString() || "",
-            tags: tagsValue,
-            maxCapacity: event.max_capacity?.toString() || "",
-        });
-        setOpenForm(true);
-    };
-
-
-
-
-    const handleDelete = async (eventId) => {
-        try {
-            await _axios.delete(`/api/events/delete/${eventId}`);
-            showSnackbar("Event deleted", "success");
-            if ((page + 1) * rowsPerPage > total - 1 && page > 0) {
-                setPage(page - 1);
-            } else {
-                fetchEvents(page, rowsPerPage);
-            }
-        } catch (err) {
-            console.error("Delete error", err);
-            showSnackbar("Error deleting event", "error");
-        }
-    };
-
-    const handleOpenForm = () => setOpenForm(true);
     const handleCloseForm = () => {
         setOpenForm(false);
         setFormData({ id: null, title: "", description: "", dateTime: "", location: "", categoryId: "", tags: "", maxCapacity: "" });
     };
 
-    const showSnackbar = (message, severity) => {
-        setSnackbar({ open: true, message, severity });
-    };
-
     return (
         <Box sx={{ maxWidth: 1000, margin: "auto", padding: 2 }}>
-            <Typography variant="h4" gutterBottom>Events Management</Typography>
-            <Button variant="contained" sx={{ mb: 2 }} onClick={handleOpenForm}>
-                Add New Event
-            </Button>
+            <Typography variant="h4" gutterBottom>Search Results</Typography>
+
+            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <TextField
+                    label="Search term"
+                    variant="outlined"
+                    fullWidth
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Button variant="contained" onClick={handleSearch} disabled={!searchTerm.trim()}>Search</Button>
+            </Box>
 
             <TableContainer component={Paper}>
                 <Table>
@@ -216,14 +214,11 @@ export default function Events() {
                         {events.map((event) => (
                             <TableRow key={event.id} hover>
                                 <TableCell>
-                                    <a href={`/event/${event.id}`} target="_blank" rel="noopener noreferrer">
-                                        {event.title}
-                                    </a>
+                                    <a href={`/event/${event.id}`} target="_blank" rel="noopener noreferrer">{event.title}</a>
                                 </TableCell>
-                                <TableCell>{event.authorName || event.authorId}</TableCell>
-                                <TableCell>{new Date(event.created_at).toLocaleString()}</TableCell>
-
-                            <TableCell>
+                                <TableCell>{event.authorName || event.author_id}</TableCell>
+                                <TableCell>{new Date(event.created_at || event.event_datetime).toLocaleString()}</TableCell>
+                                <TableCell>
                                     <IconButton onClick={() => handleEdit(event)}><EditIcon /></IconButton>
                                     <IconButton color="error" onClick={() => handleDelete(event.id)}><DeleteIcon /></IconButton>
                                 </TableCell>
@@ -241,7 +236,7 @@ export default function Events() {
                         setRowsPerPage(parseInt(e.target.value, 10));
                         setPage(0);
                     }}
-                    rowsPerPageOptions={[5, 10, 15, 25]}
+                    rowsPerPageOptions={[5, 10, 25, 50, 100]}
                 />
             </TableContainer>
 

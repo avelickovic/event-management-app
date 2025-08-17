@@ -21,8 +21,8 @@ const sessionStore = new MySQLStore({
 dotenv.config();
 
 app.use(cors({
-    origin: 'http://localhost:5173', // your frontend address
-    credentials: true                // allow sending cookies
+    origin: 'http://localhost:5173',
+    credentials: true
 }));
 app.use(session({
     secret: process.env.SESSION_SESSION_SECRET,
@@ -46,18 +46,3 @@ app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-/*app.get("/", async (req, res) => {
-    try{
-
-        const [rows] = await db.query("SELECT * FROM users");
-        res.json(rows);
-        console.log(rows);
-    } catch (error) {
-        console.log(error);
-        res.status(500).send("Error connecting to the database");
-
-    }
-
-
-})
-*/

@@ -21,7 +21,7 @@ function verifyToken(req,res,next){
 function verifyAdmin(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: "Access denied. Invalid or missing token." });
+        return res.status(401).json({ message: "Access denied Invalid or missing token." });
     }
 
     const token = authHeader.split(' ')[1];
@@ -29,7 +29,7 @@ function verifyAdmin(req, res, next) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         console.log(decoded);
         if (decoded.type !== 'admin') {
-            return res.status(403).json({ message: "Access denied. Admins only." });
+            return res.status(403).json({ message: "Access denied Admins only." });
         }
         req.user = decoded;
         next();

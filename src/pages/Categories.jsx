@@ -25,7 +25,7 @@ function Categories() {
             const res = await _axios.get("/api/categories/");
             setCategories(res.data.data || []);
             if (res.data.data.length > 0) {
-                setSelectedCategory(res.data.data[0].id); // Default to first category
+                setSelectedCategory(res.data.data[0].id);
             }
         } catch (err) {
             console.error(err);

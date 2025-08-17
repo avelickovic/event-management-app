@@ -129,7 +129,6 @@ function UserCategories() {
                 severity: "success",
             });
 
-            // Adjust page if we deleted last item on current page
             if ((page + 1) * rowsPerPage > total - 1 && page > 0) {
                 setPage(page - 1);
             } else {
@@ -163,7 +162,6 @@ function UserCategories() {
                 User Categories
             </Typography>
 
-            {/* Create/Update Form */}
             <Box
                 component="form"
                 onSubmit={handleSubmit}
@@ -205,7 +203,6 @@ function UserCategories() {
                 )}
             </Box>
 
-            {/* Table */}
             <TableContainer component={Paper}>
                 <Table>
                     <TableHead>
@@ -243,7 +240,6 @@ function UserCategories() {
                 </Table>
             </TableContainer>
 
-            {/* Pagination */}
             <TablePagination
                 component="div"
                 count={total}
@@ -254,7 +250,6 @@ function UserCategories() {
                 rowsPerPageOptions={[5, 10, 15, 25]}
             />
 
-            {/* Snackbar */}
             <Snackbar
                 open={snackbar.open}
                 autoHideDuration={4000}

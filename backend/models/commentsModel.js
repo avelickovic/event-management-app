@@ -18,7 +18,7 @@ exports.createComment = async (req, res) => {
             [result.insertId]
         );
 
-        res.status(201).json(rows[0]); // Send the full new comment object
+        res.status(201).json(rows[0]);
     } catch (error) {
         console.error("Error creating comment:", error);
         res.status(500).json({ message: "Internal server error." });
