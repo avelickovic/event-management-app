@@ -53,8 +53,26 @@ function UserCategories() {
     };
 
     useEffect(() => {
-        getCategories(page, rowsPerPage);
+        let isMounted = true;
+
+        const fetchWithPolling = async () => {
+            if (!isMounted) return;
+            await getCategories(page, rowsPerPage);
+        };
+
+
+        fetchWithPolling();
+
+
+        const interval = setInterval(() => {
+            fetchWithPolling();
+        }, 10000);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [page, rowsPerPage]);
+
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -132,7 +150,7 @@ function UserCategories() {
             if ((page + 1) * rowsPerPage > total - 1 && page > 0) {
                 setPage(page - 1);
             } else {
-                getCategories(page, rowsPerPage);
+                await getCategories(page, rowsPerPage);
             }
         } catch (error) {
             console.error("Delete error:", error);

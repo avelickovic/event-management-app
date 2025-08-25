@@ -6,6 +6,7 @@ const categoriesRoutes = require("./routes/categoriesRoutes");
 const eventsRoutes = require("./routes/eventsRoutes");
 const commentsRoutes = require("./routes/commentsRoutes");
 const tagsRoutes = require("./routes/tagsRoutes");
+const rsvpRoutes = require("./routes/RsvpRoute");
 const app = express();
 const dotenv = require("dotenv");
 const db = require("./config/db");
@@ -40,6 +41,7 @@ app.use("/api/categories", categoriesRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/comments",commentsRoutes);
 app.use("/api/tags",tagsRoutes);
+app.use("/api/rsvp",rsvpRoutes);
 
 const PORT = 3001;
 app.listen(PORT, () => {

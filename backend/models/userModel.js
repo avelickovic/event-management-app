@@ -19,7 +19,7 @@ const userSchema = Joi.object({
     email: Joi.string().email().required(),
     first_name: Joi.string().min(1).required(),
     last_name: Joi.string().min(1).required(),
-    user_type: Joi.string().valid('admin', 'user', 'manager').required(),
+    user_type: Joi.string().valid('admin', 'user', 'event_creator').required(),
     password: Joi.string().min(6).required()
 });
 
@@ -188,7 +188,7 @@ exports.changeStatus = async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: "User not found." });
         }
-        return res.status(200).json({ message: `User status changed to ${newStatus}.` });
+        return res.status(200).json({ message: `User status changed to ${newStatus}.`, status: newStatus });
 
     }
     catch (error) {

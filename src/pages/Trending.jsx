@@ -36,8 +36,28 @@ function Trending() {
     };
 
     useEffect(() => {
-        getEvents();
+        let isMounted = true;
+
+        const fetchWithPolling = async () => {
+            if (!isMounted) return;
+            await getEvents();
+        };
+
+
+        fetchWithPolling();
+
+
+        const interval = setInterval(() => {
+            fetchWithPolling();
+        }, 10000);
+
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, []);
+
 
     return (
         <Container sx={{ mt: 4 }}>

@@ -15,15 +15,15 @@ exports.login = async (req, res) => {
   try {
     const user = await userModel.findUserByEmail(email);
     console.log("User found:", user);
-    console.log(user.user_type);
+
     if (!user) {
-      return res.status(404).json({ message: "User not found." });
+      return res.status(404).json({ message: "Invalid email" });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid email or password." });
+      return res.status(404).json({ message: "Invalid password." });
     }
     if( user.status !== 'active') {
       return res.status(403).json({ message: "User is not active." });

@@ -112,9 +112,20 @@ export default function SearchEventsPage() {
         }
     };
 
+
+
     useEffect(() => {
-        if (submittedTerm) fetchEvents();
-    }, [page, rowsPerPage, submittedTerm]);
+        if (!submittedTerm) return;
+
+        fetchEvents();
+
+        const interval = setInterval(() => {
+            fetchEvents();
+        }, 10000);
+
+
+        return () => clearInterval(interval);
+    }, [submittedTerm, page, rowsPerPage]);
 
     const handleSearch = () => {
         setPage(0);
@@ -214,7 +225,17 @@ export default function SearchEventsPage() {
                         {events.map((event) => (
                             <TableRow key={event.id} hover>
                                 <TableCell>
-                                    <a href={`/event/${event.id}`} target="_blank" rel="noopener noreferrer">{event.title}</a>
+                                    <Typography
+                                        component="span"
+                                        sx={{
+                                            color: 'primary.main',
+                                            cursor: 'pointer',
+                                            '&:hover': { textDecoration: 'underline' }
+                                        }}
+                                        onClick={() => navigate(`/event/${event.id}`)}
+                                    >
+                                        {event.title}
+                                    </Typography>
                                 </TableCell>
                                 <TableCell>{event.authorName || event.author_id}</TableCell>
                                 <TableCell>{new Date(event.created_at || event.event_datetime).toLocaleString()}</TableCell>

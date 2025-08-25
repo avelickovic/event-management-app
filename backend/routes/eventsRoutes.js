@@ -7,7 +7,7 @@ const router = express.Router();
     router.get('/', eventsModel.getAllEvents);
     router.patch('/update/:eventId', verifyToken, eventsModel.updateEvent);
     router.delete('/delete/:eventId', verifyToken, eventsModel.deleteEvent);
-    router.get('/search', verifyToken, eventsModel.searchEvents);
+    router.get('/search', eventsModel.searchEvents);
     router.patch('/likes/:eventId', eventsModel.incrementLikeCount);
     router.patch('/dislikes/:eventId', eventsModel.incrementDislikeCount);
     router.patch('/views/:id', eventsModel.incrementViewCount);

@@ -35,7 +35,15 @@ function Homepage() {
     useEffect(() => {
         getEvents();
         getCategories();
+
+        const interval = setInterval(() => {
+            getEvents();
+            getCategories();
+        }, 10000);
+
+        return () => clearInterval(interval);
     }, []);
+
 
     return (
         <Container sx={{ mt: 4, position: "relative" }}>

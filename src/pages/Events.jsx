@@ -103,6 +103,15 @@ export default function Events() {
             setTotal(0);
         }
     };
+    useEffect(() => {
+        if (openForm) return;
+
+        const interval = setInterval(() => {
+            fetchEvents(page, rowsPerPage);
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [page, rowsPerPage, openForm]);
 
 
 
@@ -216,9 +225,17 @@ export default function Events() {
                         {events.map((event) => (
                             <TableRow key={event.id} hover>
                                 <TableCell>
-                                    <a href={`/event/${event.id}`} target="_blank" rel="noopener noreferrer">
+                                    <Box
+                                        component="span"
+                                        onClick={() => navigate(`/event/${event.id}`)}
+                                        sx={{
+                                            cursor: 'pointer',
+                                            color: 'primary.main',
+                                            '&:hover': { textDecoration: 'underline' }
+                                        }}
+                                    >
                                         {event.title}
-                                    </a>
+                                    </Box>
                                 </TableCell>
                                 <TableCell>{event.authorName || event.authorId}</TableCell>
                                 <TableCell>{new Date(event.created_at).toLocaleString()}</TableCell>

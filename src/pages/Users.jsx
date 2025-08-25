@@ -9,7 +9,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import ToggleOnIcon from "@mui/icons-material/ToggleOn";
 import ToggleOffIcon from "@mui/icons-material/ToggleOff";
 import _axios from "../axios";
-import { getUserId } from "../tools/auth";
 
 export default function Users() {
     const [users, setUsers] = useState([]);
@@ -22,20 +21,42 @@ export default function Users() {
     });
     const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
+    const showSnackbar = (msg, severity = "success") => setSnackbar({ open: true, message: msg, severity });
+
+
     const fetchUsers = async () => {
         try {
             const res = await _axios.get(`/api/users?page=${page}&limit=${rowsPerPage}`);
-            setUsers(res.data.users);
-            setTotal(res.data.total);
+            const mapped = (res.data.users || []).map(u => ({
+                ...u,
+
+                active: typeof u.active === "boolean" ? u.active : (u.status === "active")
+            }));
+            setUsers(mapped);
+            setTotal(res.data.total ?? 0);
         } catch (err) {
             console.error(err);
             showSnackbar("Error fetching users", "error");
         }
     };
 
-    useEffect(() => { fetchUsers(); }, [page, rowsPerPage]);
+    useEffect(() => {
+        let isMounted = true;
 
-    const showSnackbar = (msg, severity) => setSnackbar({ open: true, message: msg, severity });
+        const fetchWithPolling = async () => {
+            if (!isMounted) return;
+            await fetchUsers();
+        };
+
+        fetchWithPolling();
+        const interval = setInterval(fetchWithPolling, 15000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [page, rowsPerPage]);
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -46,11 +67,10 @@ export default function Users() {
         if (user) {
             setFormData({ ...user, password: "", confirmPassword: "" });
         } else {
-            setFormData({ first_name: "", last_name: "", email: "", user_type: "", password: "", confirmPassword: "" });
+            setFormData({ id: null, first_name: "", last_name: "", email: "", user_type: "", password: "", confirmPassword: "" });
         }
         setOpenForm(true);
     };
-
 
     const handleCloseForm = () => setOpenForm(false);
 
@@ -59,7 +79,6 @@ export default function Users() {
 
         try {
             if (formData.id) {
-
                 const updatePayload = {
                     email: formData.email,
                     first_name: formData.first_name,
@@ -70,7 +89,6 @@ export default function Users() {
                 await _axios.patch(`/api/users/update/${formData.id}`, updatePayload);
                 showSnackbar("User updated successfully", "success");
             } else {
-
                 if (formData.password !== formData.confirmPassword) {
                     showSnackbar("Passwords do not match", "error");
                     return;
@@ -88,7 +106,7 @@ export default function Users() {
                 showSnackbar("User created successfully", "success");
             }
 
-            fetchUsers();
+            await fetchUsers();
             handleCloseForm();
         } catch (err) {
             console.error(err);
@@ -96,23 +114,29 @@ export default function Users() {
         }
     };
 
-
     const toggleStatus = async (user) => {
         try {
+
             const res = await _axios.post(`/api/users/changeStatus/${user.id}`);
-            showSnackbar(res.data.message, "success");
+
+            showSnackbar(res.data?.message || "Status changed", "success");
 
 
-            setUsers(prev =>
-                prev.map(u =>
-                    u.id === user.id ? { ...u, active: !u.active } : u
-                )
-            );
+            if (res.data && typeof res.data.status === "string") {
+                const newStatus = res.data.status;
+                setUsers(prev =>
+                    prev.map(u => u.id === user.id ? { ...u, status: newStatus, active: newStatus === "active" } : u)
+                );
+            } else {
+
+                await fetchUsers();
+            }
         } catch (err) {
             console.error(err);
-            showSnackbar("Error changing status", "error");
+            showSnackbar(err.response?.data?.message || "Error changing status", "error");
         }
     };
+
     return (
         <Box sx={{ maxWidth: 1000, margin: "auto", p: 2 }}>
             <Typography variant="h4" gutterBottom>Users</Typography>
@@ -147,7 +171,6 @@ export default function Users() {
                                         >
                                             {user.active ? <ToggleOnIcon /> : <ToggleOffIcon />}
                                         </IconButton>
-
                                     )}
                                 </TableCell>
                             </TableRow>
@@ -160,15 +183,15 @@ export default function Users() {
                     page={page}
                     rowsPerPage={rowsPerPage}
                     onPageChange={(e, newPage) => setPage(newPage)}
-                    onRowsPerPageChange={e => { setRowsPerPage(parseInt(e.target.value,10)); setPage(0); }}
-                    rowsPerPageOptions={[5,10,25,50]}
+                    onRowsPerPageChange={e => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+                    rowsPerPageOptions={[5, 10, 25, 50]}
                 />
             </TableContainer>
 
             <Dialog open={openForm} onClose={handleCloseForm} maxWidth="sm" fullWidth>
                 <DialogTitle>{formData.id ? "Edit User" : "Add User"}</DialogTitle>
                 <DialogContent>
-                    <Box component="form" sx={{ mt:2, display:"flex", flexDirection:"column", gap:2 }} onSubmit={handleSubmit}>
+                    <Box component="form" sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 2 }} onSubmit={handleSubmit}>
                         <TextField label="First Name" name="first_name" value={formData.first_name} onChange={handleChange} required />
                         <TextField label="Last Name" name="last_name" value={formData.last_name} onChange={handleChange} required />
                         <TextField label="Email" name="email" value={formData.email} onChange={handleChange} type="email" required />
@@ -190,8 +213,8 @@ export default function Users() {
                 </DialogActions>
             </Dialog>
 
-            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={()=>setSnackbar(s=>({...s,open:false}))}>
-                <Alert severity={snackbar.severity} sx={{width:"100%"}}>{snackbar.message}</Alert>
+            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+                <Alert severity={snackbar.severity} sx={{ width: "100%" }}>{snackbar.message}</Alert>
             </Snackbar>
         </Box>
     );

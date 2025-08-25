@@ -27,7 +27,7 @@ exports.createComment = async (req, res) => {
 
 exports.getCommentsByEventIdByDate = async (req,res) => {
     const {eventId}= req.params;
-    console.log(req);
+
     console.log(eventId);
 
     try {

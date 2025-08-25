@@ -146,7 +146,7 @@ exports.getAllEventsSortedByDateCreatedPagination = async (req, res) => {
 
 exports.get10EventsSortedByViews = async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT * FROM events WHERE event_datetime >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY views DESC LIMIT 10");
+        const [rows] = await db.query("SELECT * FROM events WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY views DESC LIMIT 10");
         if (rows.length === 0) {
             return res.status(404).json({ message: "No events found." });
         }

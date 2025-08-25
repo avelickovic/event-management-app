@@ -58,14 +58,26 @@ function Categories() {
     };
 
     useEffect(() => {
-        fetchCategories();
-    }, []);
+        let isMounted = true;
 
-    useEffect(() => {
-        if (selectedCategory) {
-            fetchEvents(selectedCategory, page, limit);
-        }
+        const fetchAll = async () => {
+            if (!isMounted) return;
+
+            await fetchCategories();
+            if (selectedCategory) {
+                await fetchEvents(selectedCategory, page, limit);
+            }
+        };
+
+        fetchAll();
+        const interval = setInterval(fetchAll, 10000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [selectedCategory, page, limit]);
+
 
     const handlePageChange = (_, value) => {
         setPage(value);

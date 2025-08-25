@@ -59,31 +59,34 @@ export default function EventDetails() {
     const [relatedEvents, setRelatedEvents] = useState([]);
 
 
-    const fetchEvent = useCallback(async () => {
-        setLoading(true);
+    const fetchEvent = useCallback(async (isPolling = false) => {
+        if (!isPolling) setLoading(true);
         setError("");
+
         try {
             const resp = await _axios.get(`/api/events/getEvent/${id}`);
             setEvent(resp.data);
 
-
             const tagsResp = await _axios.get(`/api/tags/${id}`);
             setTags(tagsResp.data.map(t => t.name));
-
 
             const cResp = await _axios.get(`/api/comments/${id}`);
             setComments(Array.isArray(cResp.data) ? cResp.data : []);
         } catch (e) {
             console.error(e);
-            setError("Error fetching the event.");
+            if (!isPolling) setError("Error fetching the event.");
         } finally {
-            setLoading(false);
+            if (!isPolling) setLoading(false);
         }
     }, [id]);
 
+
     useEffect(() => {
-        fetchEvent();
+        fetchEvent(false); // first load, show spinner
     }, [fetchEvent]);
+
+
+
 
 
 
@@ -101,6 +104,41 @@ export default function EventDetails() {
         };
         incrementViews();
     }, [id]);
+
+
+    useEffect(() => {
+        const checkUserRsvp = async () => {
+            const userId = getUserId();
+            if (!userId) return;
+
+            try {
+                const resp = await _axios.post(`/api/rsvp/check`, {
+                    event_id: id,
+                    user_id: userId,
+                });
+
+                setRsvped(resp.data.rsvped);
+            } catch (err) {
+                console.error("Failed to check RSVP", err);
+            }
+        };
+        if (id) checkUserRsvp();
+    }, [id]);
+    useEffect(() => {
+        const fetchRsvpCount = async () => {
+            try {
+                const resp = await _axios.get(`/api/rsvp/${id}`);
+                console.log("RSVP count response:", resp.data);
+                setRsvpCount(resp.data.rsvpCount || 0);
+            } catch (err) {
+                console.error("Failed to fetch RSVP count", err);
+                setRsvpCount(0);
+            }
+        };
+        if (id) fetchRsvpCount();
+    }, [id, rsvped]);
+
+
     const fetchRelatedEvents = useCallback(async () => {
         try {
             const resp = await _axios.get(`/api/events/relatedEvents/${id}`);
@@ -112,6 +150,15 @@ export default function EventDetails() {
     useEffect(() => {
         if (event) fetchRelatedEvents();
     }, [event, fetchRelatedEvents]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            fetchEvent(true);
+            fetchRelatedEvents();
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [fetchEvent, fetchRelatedEvents]);
     const handleVote = async (type) => {
         try {
             const endpoint = type === "like" ? `/api/events/likes/${id}` : `/api/events/dislikes/${id}`;
@@ -124,17 +171,47 @@ export default function EventDetails() {
         }
     };
 
+    const formatDateForMySQL = (date) => {
+        const d = new Date(date);
+        const pad = (n) => (n < 10 ? "0" + n : n);
+        return (
+            d.getFullYear() +
+            "-" + pad(d.getMonth() + 1) +
+            "-" + pad(d.getDate()) +
+            " " + pad(d.getHours()) +
+            ":" + pad(d.getMinutes()) +
+            ":" + pad(d.getSeconds())
+        );
+    };
+
     const handleRSVP = async () => {
         if (!event || event.maxCapacity === 0) return;
         setRsvpLoading(true);
         try {
-            const resp = await _axios.post(`/api/events/${id}/rsvp`);
+            const userId = getUserId();
+            if (!userId) {
+                setSnack({ open: true, message: "You must be logged in to RSVP.", severity: "warning" });
+                setRsvpLoading(false);
+                return;
+            }
+
+            const payload = {
+                event_id: id,
+                user_id: userId,
+                registered_at: formatDateForMySQL(new Date()), // ✅ formatted
+            };
+
+            const resp = await _axios.post(`/api/rsvp`, payload);
+
             setRsvped(true);
-            setRsvpCount(resp.data.attendeesCount ?? 0);
-            setSnack({ open: true, message: "Successfully RSVPed!", severity: "success" });
+
+            const countResp = await _axios.get(`/api/rsvp/${id}`);
+            setRsvpCount(countResp.data.rsvpCount);
+
+            setSnack({ open: true, message: resp.data.message || "Successfully RSVPed!", severity: "success" });
         } catch (e) {
-            console.error(e);
-            setSnack({ open: true, message: "RSVP failed.", severity: "error" });
+            console.error("RSVP error:", e);
+            setSnack({ open: true, message: e.response?.data?.message || "RSVP failed.", severity: "error" });
         } finally {
             setRsvpLoading(false);
         }
@@ -191,7 +268,7 @@ export default function EventDetails() {
     if (loading) return <Box display="flex" alignItems="center" justifyContent="center" minHeight="50vh"><CircularProgress /></Box>;
     if (error || !event) return <Box p={3}><Alert severity="error">{error || "Event not found."}</Alert></Box>;
 
-    const capacityInfo = event.maxCapacity && event.maxCapacity > 0 ? `${rsvpCount} / ${event.maxCapacity}` : null;
+    const capacityInfo = event.max_capacity && event.max_capacity > 0 ? `${rsvpCount} / ${event.max_capacity}` : null;
 
     return (
 
@@ -242,8 +319,15 @@ export default function EventDetails() {
                         <Button variant="outlined" startIcon={<ThumbUpAltOutlinedIcon />} onClick={() => handleVote("like")}>Like</Button>
                         <Button variant="outlined" startIcon={<ThumbDownAltOutlinedIcon />} onClick={() => handleVote("dislike")}>Dislike</Button>
                         {event.maxCapacity !== 0 && (
-                            <Button variant="contained" startIcon={<EventSeatIcon />} onClick={handleRSVP} disabled={rsvped || rsvpLoading} sx={{ ml: 1 }}>
-                                RSVP {capacityInfo ? `(${capacityInfo})` : ""}
+                            <Button
+                                variant="contained"
+                                startIcon={<EventSeatIcon />}
+                                onClick={handleRSVP}
+                                disabled={rsvped || rsvpLoading || (event.max_capacity > 0 && rsvpCount >= event.max_capacity)}
+                                sx={{ ml: 1 }}
+                            >
+                                {rsvped ? "RSVPed" : (event.max_capacity > 0 && rsvpCount >= event.max_capacity) ? "At Capacity" : "RSVP"}
+                                {capacityInfo ? ` (${capacityInfo})` : ""}
                             </Button>
                         )}
                     </Stack>

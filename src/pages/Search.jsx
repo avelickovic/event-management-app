@@ -70,9 +70,22 @@ function SearchEventsPage() {
         }
     }, [initialTerm]);
 
+
     useEffect(() => {
-        if (submittedTerm) fetchEvents();
-    }, [page, rowsPerPage, submittedTerm]);
+        if (submittedTerm) {
+            fetchEvents(page, rowsPerPage);
+        }
+    }, [submittedTerm, page, rowsPerPage]);
+
+
+    useEffect(() => {
+        if (!submittedTerm) return;
+        const interval = setInterval(() => {
+            fetchEvents(page, rowsPerPage);
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [submittedTerm, page, rowsPerPage]);
 
     const handleSearch = () => {
         setPage(0);

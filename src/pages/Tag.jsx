@@ -54,8 +54,28 @@ function Tag() {
     };
 
     useEffect(() => {
-        fetchData(page, limit);
+        let isMounted = true;
+
+        const fetchWithPolling = async () => {
+            if (!isMounted) return;
+            await fetchData(page, limit);
+        };
+
+
+        fetchWithPolling();
+
+
+        const interval = setInterval(() => {
+            fetchWithPolling();
+        }, 15000);
+
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [tagName, page, limit]);
+
 
     const handlePageChange = (_, value) => {
         setPage(value);

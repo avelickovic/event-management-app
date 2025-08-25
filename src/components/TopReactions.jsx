@@ -18,7 +18,10 @@ function TopReactions() {
     };
 
     useEffect(() => {
+        const fetchInterval = setInterval(getTopReactions, 10000);
         getTopReactions();
+
+        return () => clearInterval(fetchInterval);
     }, []);
 
     return (
